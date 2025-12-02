@@ -59,14 +59,15 @@ filename = 'ip.csv'
 try:
     with open(filename, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['IP']) # 表头
+        
+        # ▼▼▼ 已删除标题行 writer.writerow(['IP']) ▼▼▼
         
         for ip in sorted(unique_ips):
-            # ▼▼▼ 修改在这里：给 IP 加上 :2083 ▼▼▼
+            # 添加端口后缀
             ip_with_port = f"{ip}:2083"
             writer.writerow([ip_with_port])
             
-    print(f"\n成功！共保存 {len(unique_ips)} 个 IP 到 {filename}")
+    print(f"\n成功！共保存 {len(unique_ips)} 个 IP 到 {filename} (无标题)")
 
 except Exception as e:
     print(f"\n写入文件失败: {e}")
