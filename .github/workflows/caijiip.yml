@@ -1,4 +1,4 @@
-name: Mixed Scraper with Selenium
+name: best_ip
 
 on:
   schedule:
