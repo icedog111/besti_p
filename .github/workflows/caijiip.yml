@@ -1,4 +1,4 @@
-name: Get VPS789 IPs Fixed URL
+name: Get VPS789 Top 10 IPs
 
 on:
   schedule:
@@ -33,11 +33,14 @@ jobs:
         run: |
           git config --global user.email "gonggct111@gmail.com"
           git config --global user.name "GitHub Action"
+          
+          # 强制添加 ip.csv
           git add ip.csv
+          
           if git diff --staged --quiet; then
-            echo "No changes detected."
+            echo "IP列表无变化，跳过提交。"
           else
-            echo "Committing changes..."
-            git commit -m "Update IP list"
+            echo "IP列表已更新，正在提交..."
+            git commit -m "Update IP list: $(date +'%Y-%m-%d')"
             git push
           fi
