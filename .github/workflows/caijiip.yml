@@ -1,4 +1,4 @@
-name: Scrape VPS789 via Selenium
+name: Get Fastest Uouin IPs
 
 on:
   schedule:
@@ -24,8 +24,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # 安装 Selenium 和 辅助库
-          pip install selenium webdriver-manager beautifulsoup4 requests
+          # 必须安装 beautifulsoup4
+          pip install requests beautifulsoup4
 
       - name: Run script
         run: python main.py
@@ -39,6 +39,6 @@ jobs:
             echo "IP列表无变化"
           else
             echo "正在提交..."
-            git commit -m "Update IP list (Selenium)"
+            git commit -m "Update IP list (Top 6 Fastest)"
             git push
           fi
