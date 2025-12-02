@@ -6,11 +6,12 @@ import os
 # 目标 URL 列表
 urls = [
     'https://vps789.com/cfip?remarks=ip',
-    'https://ip.164746.xyz/ipTop10.html',
-    'https://cf.090227.xyz',
-    'https://api.uouin.com/cloudflare.html',
-    'https://www.wetest.vip/page/cloudflare/address_v4.html',
-    'https://stock.hostmonit.com/CloudFlareYes'
+    'https://cf.090227.xyz/ct?ips=6'
+#    'https://ip.164746.xyz/ipTop10.html',
+#    'https://cf.090227.xyz',
+#    'https://api.uouin.com/cloudflare.html',
+#    'https://www.wetest.vip/page/cloudflare/address_v4.html',
+#    'https://stock.hostmonit.com/CloudFlareYes'
 ]
 
 # 模拟浏览器 User-Agent
