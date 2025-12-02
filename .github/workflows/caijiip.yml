@@ -2,9 +2,11 @@ name: Auto Scrape Cloudflare IPs
 
 on:
   schedule:
-    - cron: '*/60 * * * *'
-  workflow_dispatch:
+    # 北京时间每天上午 10:00 运行 (UTC时间 02:00)
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # 允许手动点击按钮触发
 
+# 赋予写入权限，否则无法提交代码
 permissions:
   contents: write
 
@@ -13,34 +15,38 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout code (检出代码)
         uses: actions/checkout@v3
 
-      - name: Set up Python
+      - name: Set up Python (设置Python环境)
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: Install dependencies
+      - name: Install dependencies (安装依赖)
         run: |
           python -m pip install --upgrade pip
-          pip install requests
+          # ▼▼▼ 必须安装 beautifulsoup4，否则解析表格会报错 ▼▼▼
+          pip install requests beautifulsoup4
 
-      - name: Run script
+      - name: Run script (运行脚本)
         run: python main.py
 
-      - name: Commit and Push
+      - name: Commit and Push (提交更改)
         run: |
+          # 配置 Git 用户信息
           git config --global user.email "gonggct111@gmail.com"
           git config --global user.name "icedog111"
           
-          # ▼▼▼ 确保这一行存在，否则会报错 ▼▼▼
+          # ▼▼▼ 关键步骤：强制添加 ip.csv 到暂存区 ▼▼▼
+          # 这能解决 "Untracked files" 导致的报错
           git add ip.csv
           
+          # 检查暂存区是否有变化
           if git diff --staged --quiet; then
-            echo "No changes detected. Skipping push."
+            echo "没有发现变更 (No changes detected). 跳过提交。"
           else
-            echo "Changes detected. Committing..."
+            echo "发现变更，正在提交 (Changes detected. Committing)..."
             git commit -m "Update IP list: $(date +'%Y-%m-%d')"
             git push
           fi
