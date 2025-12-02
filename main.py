@@ -1,111 +1,99 @@
+import requests
 import re
 import csv
-import time
-from datetime import datetime
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 
-# =================配置区域=================
-url = "https://vps789.com/cfip/?remarks=ip"
-# 筛选标准: 大于 2 天 (即 3天、4天...)
-days_threshold = 2
+# ================= 配置区域 =================
+url = "https://api.uouin.com/cloudflare.html"
+limit = 6  # 提取最快的 6 个
 # ==========================================
 
-def setup_driver():
-    """配置无头 Chrome 浏览器"""
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")  # 无头模式，无界面运行
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--window-size=1920,1080")
-    # 模拟真实浏览器 User-Agent
-    chrome_options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-    
-    driver = webdriver.Chrome(options=chrome_options)
-    return driver
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+}
 
 final_ips = []
-seen_ips = set()
+candidates = [] # 用于存储 (IP, 速度) 的临时列表
 
-print(f"启动浏览器，准备访问: {url}")
-driver = setup_driver()
+# 辅助函数：将速度字符串转换为数字 (统一单位为 MB/s)
+def parse_speed(speed_str):
+    """
+    输入: "25.5 MB/s" 或 "500 kB/s"
+    输出: 25.5 (float)
+    """
+    s = speed_str.upper().strip()
+    # 提取数字部分
+    match = re.search(r'(\d+\.?\d*)', s)
+    if not match:
+        return 0.0
+    
+    value = float(match.group(1))
+    
+    # 单位换算
+    if 'KB' in s:
+        value = value / 1024  # 1 MB = 1024 KB
+    
+    return value
+
+print(f"正在分析网站: {url}")
 
 try:
-    # 1. 打开网页
-    driver.get(url)
+    response = requests.get(url, headers=headers, timeout=15)
     
-    # 2. 等待网页加载 (等待表格行出现)
-    print("正在等待页面数据加载...")
-    try:
-        # 最多等 20 秒，直到 <tbody> 出现
-        WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.TAG_NAME, "tbody"))
-        )
-        # 再额外强制等 3 秒，确保数据渲染完全
-        time.sleep(3)
-    except Exception as e:
-        print("等待超时，页面可能未正确加载，尝试继续解析...")
-
-    # 3. 获取渲染后的网页源码
-    page_source = driver.page_source
-    print(f"页面已加载，源码长度: {len(page_source)}")
-
-    # 4. 使用 BeautifulSoup 解析 HTML
-    soup = BeautifulSoup(page_source, 'html.parser')
-    
-    # 找到所有的表格行
-    rows = soup.find_all('tr')
-    print(f"找到 {len(rows)} 行表格数据")
-
-    # 5. 遍历表格提取数据
-    for row in rows:
-        text = row.get_text(separator=" ", strip=True)
+    if response.status_code == 200:
+        response.encoding = 'utf-8'
+        soup = BeautifulSoup(response.text, 'html.parser')
         
-        # 提取 IP (正则)
-        ip_match = re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', text)
-        if not ip_match:
-            continue
-        ip = ip_match.group()
-
-        # 提取时间/天数
-        # 情况 A: 网页显示的是 "5天", "3天" (相对时间)
-        day_match = re.search(r'(\d+)\s*天', text)
+        # 找到所有表格行
+        rows = soup.find_all('tr')
+        print(f"找到 {len(rows)} 行数据，正在分析速度...")
         
-        # 情况 B: 网页显示的是 "2023-11-20" (绝对时间)
-        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', text)
+        for row in rows:
+            # 获取这一行的所有单元格
+            cols = row.find_all(['td', 'th'])
+            row_text = row.get_text()
+            
+            # 1. 提取 IP (使用正则)
+            ip_match = re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', row_text)
+            if not ip_match:
+                continue
+            ip = ip_match.group()
+            
+            # 2. 提取速度
+            # 遍历这一行的每个格子，找包含 "MB/S" 或 "KB/S" 的内容
+            speed_value = 0.0
+            for col in cols:
+                cell_text = col.get_text().strip()
+                if 'MB/s' in cell_text or 'kB/s' in cell_text or 'MB/S' in cell_text:
+                    speed_value = parse_speed(cell_text)
+                    break # 找到速度列后停止查找该行
+            
+            # 如果没在格子里找到，尝试整行匹配 (兜底策略)
+            if speed_value == 0.0:
+                speed_match = re.search(r'(\d+\.?\d*)\s*(MB/s|kB/s)', row_text, re.IGNORECASE)
+                if speed_match:
+                    speed_value = parse_speed(speed_match.group(0))
+            
+            # 只有速度大于0才加入候选
+            if speed_value > 0:
+                candidates.append({'ip': ip, 'speed': speed_value})
         
-        days_ago = 0
+        # === 核心步骤：按速度从大到小排序 ===
+        # reverse=True 表示降序 (大到小)
+        candidates.sort(key=lambda x: x['speed'], reverse=True)
         
-        if day_match:
-            # 直接提取 "5天" 中的 5
-            days_ago = int(day_match.group(1))
-        elif date_match:
-            # 计算日期差
-            try:
-                date_obj = datetime.strptime(date_match.group(1), "%Y-%m-%d")
-                days_ago = (datetime.now() - date_obj).days
-            except:
-                pass
+        print(f"提取并排序了 {len(candidates)} 个有效 IP")
         
-        # === 核心判断 ===
-        # 如果从网页上提取到的天数 > 2，或者通过日期算出 > 2
-        if days_ago > days_threshold:
-            if ip not in seen_ips and ip != '0.0.0.0':
-                seen_ips.add(ip)
-                final_ips.append(ip)
-                # print(f"  提取到: {ip} (提交时间: {days_ago} 天前)")
-
-    print(f"筛选完成！保留提交时间 > {days_threshold} 天的 IP: {len(final_ips)} 个")
+        # 取前 6 个
+        for item in candidates[:limit]:
+            final_ips.append(item['ip'])
+            print(f"  -> 选中: {item['ip']} (速度: {item['speed']:.2f} MB/s)")
+            
+    else:
+        print(f"请求失败，状态码: {response.status_code}")
 
 except Exception as e:
     print(f"发生错误: {e}")
-
-finally:
-    driver.quit()
 
 # 写入 CSV
 filename = 'ip.csv'
@@ -114,10 +102,11 @@ try:
         writer = csv.writer(f)
         if not final_ips:
             print("警告: 结果为空")
+        
         for ip in final_ips:
             writer.writerow([f"{ip}:2083"])
             
-    if final_ips:
-        print(f"文件已保存: {filename}")
+    print(f"\n成功保存速度最快的 {len(final_ips)} 个 IP 到 {filename}")
+
 except Exception as e:
     print(f"写入失败: {e}")
