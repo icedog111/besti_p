@@ -39,8 +39,8 @@ jobs:
       - name: Commit and Push changes
         run: |
           # 配置 git 用户信息（这是必须的）
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "icedog111"
+          git config --global user.email "gonggct111@gmail.com"
           
           # 添加生成的 ip.txt
           git add ip.txt
