@@ -1,5 +1,4 @@
-name: Auto Scrape Cloudflare IPs
-
+name: Auto Scrape Cloudflare dns
 on:
   schedule:
     # 北京时间每天上午 10:00 运行 (UTC 02:00)
