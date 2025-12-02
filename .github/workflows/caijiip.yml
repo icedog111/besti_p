@@ -1,8 +1,9 @@
-name: Get Fastest Uouin IPs
+name: Mixed Cloudflare Scraper
 
 on:
   schedule:
-    - cron: '0 2 * * *'
+    # 北京时间每天上午 10:00 (UTC 02:00)
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -24,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # 必须安装 beautifulsoup4
+          # 安装 requests 和 beautifulsoup4
           pip install requests beautifulsoup4
 
       - name: Run script
@@ -33,12 +34,15 @@ jobs:
       - name: Commit and Push
         run: |
           git config --global user.email "gonggct111@gmail.com"
-          git config --global user.name "GitHub Action"
+          git config --global user.name "icedog111"
+          
+          # 强制追踪
           git add ip.csv
+          
           if git diff --staged --quiet; then
-            echo "IP列表无变化"
+            echo "IP列表无变化，跳过提交。"
           else
-            echo "正在提交..."
-            git commit -m "Update IP list (Top 6 Fastest)"
+            echo "IP列表已更新，正在提交..."
+            git commit -m "Update IP list (Mixed Sources): $(date +'%Y-%m-%d')"
             git push
           fi
