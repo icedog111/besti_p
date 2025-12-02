@@ -1,112 +1,183 @@
 import requests
 import re
 import csv
+import json
+from datetime import datetime
 from bs4 import BeautifulSoup
 
-# ================= 配置区域 =================
-url = "https://api.uouin.com/cloudflare.html"
-limit = 6  # 提取最快的 6 个
-# ==========================================
-
+# ================= 通用配置 =================
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 }
-
 final_ips = []
-candidates = [] # 用于存储 (IP, 速度) 的临时列表
+seen_ips = set()
 
-# 辅助函数：将速度字符串转换为数字 (统一单位为 MB/s)
+def is_valid_ip(ip):
+    try:
+        parts = ip.split('.')
+        return len(parts) == 4 and all(0 <= int(part) <= 255 for part in parts)
+    except ValueError:
+        return False
+
+# ================= 模块 1: vps789 (时间筛选 > 2天) =================
+def fetch_vps789():
+    url = "https://vps789.com/public/sum/cfIpApi"
+    print(f"\n[1/3] 正在处理 vps789 (筛选提交时间 > 2天)...")
+    
+    # 模拟真实请求头
+    vps_headers = headers.copy()
+    vps_headers.update({
+        'Content-Type': 'application/json;charset=UTF-8',
+        'Origin': 'https://vps789.com',
+        'Referer': 'https://vps789.com/cfip?remarks=ip'
+    })
+
+    try:
+        # 必须 POST 请求
+        response = requests.post(url, json={}, headers=vps_headers, timeout=15)
+        if response.status_code == 200:
+            data = response.json()
+            # 兼容处理：有时候数据在 data 字段，有时候是列表
+            target_list = []
+            if isinstance(data, list):
+                target_list = data
+            elif isinstance(data, dict) and 'data' in data and isinstance(data['data'], list):
+                target_list = data['data']
+            elif isinstance(data, dict) and 'rows' in data and isinstance(data['rows'], list):
+                target_list = data['rows']
+
+            now = datetime.now()
+            count = 0
+            
+            for item in target_list:
+                if not isinstance(item, dict): continue
+                
+                ip = item.get('ip')
+                time_str = item.get('time')
+                
+                if ip and time_str:
+                    try:
+                        # 解析时间
+                        ip_time = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+                        delta = now - ip_time
+                        
+                        # 核心筛选: 大于 2 天
+                        if delta.days > 2:
+                            if ip not in seen_ips and is_valid_ip(ip):
+                                seen_ips.add(ip)
+                                final_ips.append(ip)
+                                count += 1
+                    except ValueError:
+                        continue
+            print(f"  -> 成功提取 {count} 个符合时间条件的 IP")
+        else:
+            print(f"  -> 请求失败: {response.status_code}")
+    except Exception as e:
+        print(f"  -> 出错: {e}")
+
+# ================= 模块 2: Uouin (速度排序取前 6) =================
 def parse_speed(speed_str):
-    """
-    输入: "25.5 MB/s" 或 "500 kB/s"
-    输出: 25.5 (float)
-    """
+    """辅助函数: 统一速度单位为 MB/s"""
     s = speed_str.upper().strip()
-    # 提取数字部分
     match = re.search(r'(\d+\.?\d*)', s)
-    if not match:
-        return 0.0
+    if not match: return 0.0
+    val = float(match.group(1))
+    if 'KB' in s: val /= 1024
+    return val
+
+def fetch_uouin():
+    url = "https://api.uouin.com/cloudflare.html"
+    print(f"\n[2/3] 正在处理 Uouin (按速度排序取前 6)...")
     
-    value = float(match.group(1))
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            rows = soup.find_all('tr')
+            candidates = []
+            
+            for row in rows:
+                text = row.get_text()
+                # 提取 IP
+                ip_match = re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', text)
+                if ip_match:
+                    ip = ip_match.group()
+                    # 提取速度
+                    speed = 0.0
+                    # 优先查找单元格
+                    for col in row.find_all(['td', 'th']):
+                        c_text = col.get_text().upper()
+                        if 'MB/S' in c_text or 'KB/S' in c_text:
+                            speed = parse_speed(c_text)
+                            break
+                    # 兜底查找整行
+                    if speed == 0.0:
+                        sm = re.search(r'(\d+\.?\d*)\s*(MB/s|kB/s)', text, re.IGNORECASE)
+                        if sm: speed = parse_speed(sm.group(0))
+                    
+                    if speed > 0 and is_valid_ip(ip):
+                        candidates.append({'ip': ip, 'speed': speed})
+            
+            # 按速度降序排序
+            candidates.sort(key=lambda x: x['speed'], reverse=True)
+            
+            # 取前 6 个
+            count = 0
+            for item in candidates[:6]:
+                ip = item['ip']
+                if ip not in seen_ips:
+                    seen_ips.add(ip)
+                    final_ips.append(ip)
+                    count += 1
+            print(f"  -> 成功提取 {count} 个高速 IP")
+            
+        else:
+            print(f"  -> 请求失败: {response.status_code}")
+    except Exception as e:
+        print(f"  -> 出错: {e}")
+
+# ================= 模块 3: cf.090227 (提取所有) =================
+def fetch_090227():
+    url = "https://cf.090227.xyz/ct?ips=6"
+    print(f"\n[3/3] 正在处理 cf.090227 (提取所有)...")
     
-    # 单位换算
-    if 'KB' in s:
-        value = value / 1024  # 1 MB = 1024 KB
-    
-    return value
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code == 200:
+            # 简单粗暴正则提取所有 IP
+            found_ips = re.findall(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', response.text)
+            count = 0
+            for ip in found_ips:
+                if ip not in seen_ips and is_valid_ip(ip):
+                    seen_ips.add(ip)
+                    final_ips.append(ip)
+                    count += 1
+            print(f"  -> 成功提取 {count} 个 IP")
+        else:
+            print(f"  -> 请求失败: {response.status_code}")
+    except Exception as e:
+        print(f"  -> 出错: {e}")
 
-print(f"正在分析网站: {url}")
+# ================= 主执行流程 =================
+if __name__ == "__main__":
+    # 依次执行任务
+    fetch_vps789()
+    fetch_uouin()
+    fetch_090227()
 
-try:
-    response = requests.get(url, headers=headers, timeout=15)
-    
-    if response.status_code == 200:
-        response.encoding = 'utf-8'
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # 找到所有表格行
-        rows = soup.find_all('tr')
-        print(f"找到 {len(rows)} 行数据，正在分析速度...")
-        
-        for row in rows:
-            # 获取这一行的所有单元格
-            cols = row.find_all(['td', 'th'])
-            row_text = row.get_text()
+    # 写入文件
+    filename = 'ip.csv'
+    print(f"\n正在写入 {filename} ...")
+    try:
+        with open(filename, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            if not final_ips:
+                print("警告: 最终列表为空！")
             
-            # 1. 提取 IP (使用正则)
-            ip_match = re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', row_text)
-            if not ip_match:
-                continue
-            ip = ip_match.group()
-            
-            # 2. 提取速度
-            # 遍历这一行的每个格子，找包含 "MB/S" 或 "KB/S" 的内容
-            speed_value = 0.0
-            for col in cols:
-                cell_text = col.get_text().strip()
-                if 'MB/s' in cell_text or 'kB/s' in cell_text or 'MB/S' in cell_text:
-                    speed_value = parse_speed(cell_text)
-                    break # 找到速度列后停止查找该行
-            
-            # 如果没在格子里找到，尝试整行匹配 (兜底策略)
-            if speed_value == 0.0:
-                speed_match = re.search(r'(\d+\.?\d*)\s*(MB/s|kB/s)', row_text, re.IGNORECASE)
-                if speed_match:
-                    speed_value = parse_speed(speed_match.group(0))
-            
-            # 只有速度大于0才加入候选
-            if speed_value > 0:
-                candidates.append({'ip': ip, 'speed': speed_value})
+            for ip in final_ips:
+                writer.writerow([f"{ip}:2083"])
+                
+        print(f"任务完成！总共保存 {len(final_ips)} 个唯一 IP。")
         
-        # === 核心步骤：按速度从大到小排序 ===
-        # reverse=True 表示降序 (大到小)
-        candidates.sort(key=lambda x: x['speed'], reverse=True)
-        
-        print(f"提取并排序了 {len(candidates)} 个有效 IP")
-        
-        # 取前 6 个
-        for item in candidates[:limit]:
-            final_ips.append(item['ip'])
-            print(f"  -> 选中: {item['ip']} (速度: {item['speed']:.2f} MB/s)")
-            
-    else:
-        print(f"请求失败，状态码: {response.status_code}")
-
-except Exception as e:
-    print(f"发生错误: {e}")
-
-# 写入 CSV
-filename = 'ip.csv'
-try:
-    with open(filename, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        if not final_ips:
-            print("警告: 结果为空")
-        
-        for ip in final_ips:
-            writer.writerow([f"{ip}:2083"])
-            
-    print(f"\n成功保存速度最快的 {len(final_ips)} 个 IP 到 {filename}")
-
-except Exception as e:
-    print(f"写入失败: {e}")
+    except Exception as e:
+        print(f"写入文件失败: {e}")
