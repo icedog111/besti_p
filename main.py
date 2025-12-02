@@ -5,6 +5,7 @@ import os
 
 # 目标 URL 列表
 urls = [
+    'https://vps789.com/cfip?remarks=ip',
     'https://ip.164746.xyz/ipTop10.html',
     'https://cf.090227.xyz',
     'https://api.uouin.com/cloudflare.html',
