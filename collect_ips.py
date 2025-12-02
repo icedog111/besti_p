@@ -73,9 +73,9 @@ for url in urls:
 
 # 写入文件
 if unique_ips:
-    with open('ip.txt', 'w', encoding='utf-8') as file:
+    with open('ip.csv', 'w', encoding='utf-8') as file:
         for ip in sorted(unique_ips):
             file.write(ip + '\n')
-    print(f"\n总计写入 {len(unique_ips)} 个唯一 IP 到 ip.txt")
+    print(f"\n总计写入 {len(unique_ips)} 个唯一 IP 到 ip.csv")
 else:
     print("\n未找到任何有效 IP。")
