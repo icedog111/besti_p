@@ -1,41 +1,46 @@
-name: Update IP List
+name: Auto Scrape Cloudflare IPs
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # 每隔三十分钟运行一次
-  workflow_dispatch:  # 手动触发
- # push: # 允许提交触发
+    - cron: '*/60 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-
-  update-ip-list:
+  scrape-and-commit:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v3
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests
-        pip install beautifulsoup4
-        
-    - name: Run script
-      run: python ${{ github.workspace }}/collect_ips.py
-        
-    - name: Commit and push changes
-      run: |
-        git config --global user.email "gonggct111@gmail.com"
-        git config --global user.name "icedog111"
-        if [ -n "$(git status --porcelain)" ]; then
-          git add ip.txt
-          git commit -m "Automatic update"
-          git push
-        else
-          echo "No changes detected, skipping commit."
-        fi
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run script
+        run: python main.py
+
+      - name: Commit and Push
+        run: |
+          git config --global user.email "gonggct111@gmail.com"
+          git config --global user.name "GitHub Action"
+          
+          # ▼▼▼ 确保这一行存在，否则会报错 ▼▼▼
+          git add ip.csv
+          
+          if git diff --staged --quiet; then
+            echo "No changes detected. Skipping push."
+          else
+            echo "Changes detected. Committing..."
+            git commit -m "Update IP list: $(date +'%Y-%m-%d')"
+            git push
+          fi
