@@ -1,0 +1,54 @@
+name: Auto Update IP List
+
+on:
+  schedule:
+    # 北京时间每天 08:00 和 20:00 运行 (UTC时间 00:00 和 12:00)
+    - cron: '0 0,12 * * *'
+  workflow_dispatch: # 允许手动点击按钮触发
+
+# 给 GITHUB_TOKEN 写入仓库的权限，以便将 ip.txt 推送回去
+permissions:
+  contents: write
+
+jobs:
+  scrape-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 检出代码
+      - name: Checkout codebase
+        uses: actions/checkout@v4
+
+      # 2. 设置 Python 环境
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # 3. 安装依赖库
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4
+
+      # 4. 运行你的 Python 脚本
+      - name: Run Scraper Script
+        run: python main.py
+
+      # 5. 检查是否有变化并推送回仓库
+      - name: Commit and Push changes
+        run: |
+          # 配置 git 用户信息（这是必须的）
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 添加生成的 ip.txt
+          git add ip.txt
+          
+          # 检查是否有文件变化，如果有则提交，没有则跳过
+          if git diff --index --quiet HEAD; then
+            echo "No changes detected. Skipping commit."
+          else
+            git commit -m "Auto-update IP list [skip ci]"
+            git push
+          fi
