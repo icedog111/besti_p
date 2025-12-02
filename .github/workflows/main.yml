@@ -1,31 +1,50 @@
-name: Update Cloudflare DNS
+name: Auto Scrape Cloudflare IPs
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # 每隔三十分钟运行一次
-  workflow_dispatch:  # 手动触发
- # push: # 允许提交触发
-  
+    # 北京时间每天上午 10:00 运行 (UTC 02:00)
+    - cron: '0 2 * * *'
+  workflow_dispatch: # 允许手动点击按钮运行
+
+# 赋予写权限，否则无法 push 代码
+permissions:
+  contents: write
+
 jobs:
-  update-dns:
+  scrape-and-commit:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout code (检出代码)
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'  # 你可以指定需要的 Python 版本
+      - name: Set up Python (设置Python环境)
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests
+      - name: Install dependencies (安装依赖)
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
 
-    - name: Run update script
-      env:
-        CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-      run: |
-        python bestdomain.py
+      - name: Run script (运行脚本)
+        run: python main.py
+
+      - name: Commit and Push (提交更改)
+        run: |
+          # 配置你的邮箱和用户名
+          git config --global user.email "gonggct111@gmail.com"
+          git config --global user.name "icedog111"
+          
+          # 1. 强制添加 ip.csv 到暂存区 (解决 Untracked files 问题)
+          git add ip.csv
+          
+          # 2. 检查是否有变化
+          if git diff --staged --quiet; then
+            echo "No changes detected. Skipping push."
+          else
+            echo "Changes detected. Committing..."
+            git commit -m "Update IP list: $(date +'%Y-%m-%d')"
+            git push
+          fi
