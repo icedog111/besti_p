@@ -12,7 +12,7 @@ urls = [
     'https://stock.hostmonit.com/CloudFlareYes'
 ]
 
-# 模拟浏览器 User-Agent (防止被拦截)
+# 模拟浏览器 User-Agent
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 }
@@ -24,7 +24,7 @@ ip_pattern = r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}'
 unique_ips = set()
 
 def is_valid_ip(ip):
-    """验证 IP 格式是否合法 (0-255)"""
+    """验证 IP 格式"""
     try:
         parts = ip.split('.')
         return len(parts) == 4 and all(0 <= int(part) <= 255 for part in parts)
@@ -36,12 +36,10 @@ print("开始执行抓取任务...")
 for url in urls:
     try:
         print(f"正在请求: {url}")
-        # 设置 15秒超时
         response = requests.get(url, headers=headers, timeout=15)
         
         if response.status_code == 200:
             response.encoding = 'utf-8'
-            # 使用正则全文本提取，比解析 HTML 更通用
             found_ips = re.findall(ip_pattern, response.text)
             
             count = 0
@@ -61,9 +59,12 @@ filename = 'ip.csv'
 try:
     with open(filename, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['IP']) # 写入表头
+        writer.writerow(['IP']) # 表头
+        
         for ip in sorted(unique_ips):
-            writer.writerow([ip])
+            # ▼▼▼ 修改在这里：给 IP 加上 :2083 ▼▼▼
+            ip_with_port = f"{ip}:2083"
+            writer.writerow([ip_with_port])
             
     print(f"\n成功！共保存 {len(unique_ips)} 个 IP 到 {filename}")
 
